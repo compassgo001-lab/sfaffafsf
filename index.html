@@ -3,26 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Terra Dominus: Global Map</title>
+    <title>Terra Dominus: Imperial Map</title>
+    <script src="assets/icons.js"></script>
     <style>
         body { margin: 0; background: #020617; overflow: hidden; color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; }
         #ui-overlay { position: absolute; top: 20px; left: 20px; pointer-events: none; }
-        .stat-box { background: rgba(30, 41, 59, 0.8); padding: 10px 20px; border-radius: 12px; border: 1px solid #38bdf8; margin-bottom: 10px; backdrop-filter: blur(5px); }
-        #city-info { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1e293b; padding: 15px; border-radius: 20px; border-top: 4px solid #38bdf8; width: 80%; display: none; }
+        .stat-box { background: rgba(15, 23, 42, 0.9); padding: 12px 20px; border-radius: 12px; border: 1px solid #38bdf8; margin-bottom: 10px; backdrop-filter: blur(10px); box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        #city-info { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1e293b; padding: 20px; border-radius: 24px; border: 2px solid #38bdf8; width: 85%; display: none; box-shadow: 0 -10px 40px rgba(0,0,0,0.5); text-align: center; }
+        .btn-capture { width: 100%; margin-top: 15px; padding: 15px; border-radius: 12px; background: linear-gradient(135deg, #38bdf8, #0ea5e9); border: none; color: white; font-weight: bold; font-size: 1.1em; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div id="ui-overlay">
-    <div class="stat-box">ИМПЕРИЯ: <span style="color:#38bdf8">Terra Dominus</span></div>
-    <div class="stat-box">ДОХОД: <span style="color:#10b981">1,240 USDT/час</span></div>
+    <div class="stat-box">🌍 СТАТУС: <span id="user-rank" style="color:#38bdf8">КРЕСТЬЯНИН</span></div>
+    <div class="stat-box">💰 КАЗНА: <span style="color:#10b981">0.00 USDT</span></div>
 </div>
 
 <div id="city-info">
-    <div id="city-name" style="font-size: 1.2em; font-weight: bold;">Город</div>
-    <div id="city-owner" style="font-size: 0.9em; color: #94a3b8;">Владелец: Свободен</div>
-    <button style="width:100%; margin-top:10px; padding:10px; border-radius:10px; background:#38bdf8; border:none; color:white; font-weight:bold;">ЗАХВАТИТЬ</button>
+    <div id="city-name" style="font-size: 1.4em; font-weight: bold; margin-bottom: 5px;">Название города</div>
+    <div id="city-owner" style="color: #94a3b8;">Владелец: Свободная земля</div>
+    <button class="btn-capture" onclick="captureAction()">ЗАХВАТИТЬ ЗА 10 USDT</button>
 </div>
 
 <canvas id="mapCanvas"></canvas>
@@ -33,17 +35,30 @@
     const cityInfo = document.getElementById('city-info');
 
     let width, height;
-    let hexSize = 40;
-    let offset = { x: 0, y: 0 };
+    let hexSize = 50;
+    let offset = { x: window.innerWidth/2, y: window.innerHeight/2 };
     let isDragging = false;
     let startMouse = { x: 0, y: 0 };
 
-    // Вымышленные города
+    // Загрузка изображений
+    const images = {};
+    let loadedImages = 0;
+    const totalImages = Object.keys(MAP_ICONS).length;
+
+    for (let key in MAP_ICONS) {
+        images[key] = new Image();
+        images[key].src = MAP_ICONS[key];
+        images[key].onload = () => {
+            loadedImages++;
+            if (loadedImages === totalImages) draw();
+        };
+    }
+
     const cities = [
-        { x: 0, y: 0, name: "Capital Primus", owner: "Emperor" },
-        { x: 2, y: -1, name: "Gold-Harbor", owner: "Lord Voldem" },
-        { x: -3, y: 2, name: "Crypto-Sity", owner: "None" },
-        { x: 5, y: 4, name: "Rich-Valley", owner: "None" }
+        { x: 0, y: 0, name: "СТОЛИЦА МИРА", type: "capital", owner: "Emperor" },
+        { x: 2, y: -1, name: "Золотые Прииски", type: "mine", owner: "Lord-X" },
+        { x: -2, y: 2, name: "Замок Теней", type: "city", owner: "None" },
+        { x: 3, y: 3, name: "Башня Стражи", type: "tower", owner: "None" }
     ];
 
     function init() {
@@ -60,63 +75,63 @@
         }
         ctx.closePath();
         ctx.strokeStyle = color;
-        ctx.lineWidth = 1;
         ctx.stroke();
     }
 
     function draw() {
         ctx.clearRect(0, 0, width, height);
-        
-        // Рисуем сетку
         const rowStep = hexSize * 1.5;
         const colStep = hexSize * Math.sqrt(3);
 
-        for (let q = -10; q < 20; q++) {
-            for (let r = -10; r < 20; r++) {
+        for (let q = -5; q < 6; q++) {
+            for (let r = -5; r < 6; r++) {
                 let centerX = offset.x + colStep * (q + r/2);
                 let centerY = offset.y + rowStep * r;
 
-                // Если гексагон в зоне видимости
-                if (centerX > -50 && centerX < width + 50 && centerY > -50 && centerY < height + 50) {
+                if (centerX > -100 && centerX < width + 100 && centerY > -100 && centerY < height + 100) {
                     drawHex(centerX, centerY, hexSize - 2, "#1e293b");
                     
-                    // Рисуем город, если он есть в этой координате
                     cities.forEach(city => {
                         if (city.x === q && city.y === r) {
-                            ctx.fillStyle = city.owner === "None" ? "#38bdf8" : "#f43f5e";
-                            ctx.beginPath();
-                            ctx.arc(centerX, centerY, 8, 0, Math.PI*2);
-                            ctx.fill();
+                            const img = images[city.type];
+                            const imgSize = hexSize * 1.2;
+                            ctx.drawImage(img, centerX - imgSize/2, centerY - imgSize/2.5 - 15, imgSize, imgSize);
+                            
                             ctx.fillStyle = "white";
-                            ctx.font = "10px Arial";
-                            ctx.fillText(city.name, centerX - 20, centerY + 25);
+                            ctx.font = "bold 12px Arial";
+                            ctx.textAlign = "center";
+                            ctx.fillText(city.name.toUpperCase(), centerX, centerY + 35);
                         }
                     });
                 }
             }
         }
-        requestAnimationFrame(draw);
     }
 
-    // Управление (Drag)
+    // Управление
     canvas.addEventListener('mousedown', e => { isDragging = true; startMouse = { x: e.clientX - offset.x, y: e.clientY - offset.y }; });
     window.addEventListener('mouseup', () => isDragging = false);
     window.addEventListener('mousemove', e => {
         if (isDragging) {
             offset.x = e.clientX - startMouse.x;
             offset.y = e.clientY - startMouse.y;
+            draw();
         }
     });
 
-    // Клик по карте
-    canvas.addEventListener('click', () => {
+    canvas.addEventListener('click', (e) => {
+        // Простая логика выбора ближайшего города (для демо)
         cityInfo.style.display = 'block';
-        document.getElementById('city-name').innerText = "Сектор захвачен!";
+        document.getElementById('city-name').innerText = "НОВАЯ ТЕРРИТОРИЯ";
     });
+
+    function captureAction() {
+        alert("Запрос к смарт-контракту отправлен! Ожидание USDT...");
+        cityInfo.style.display = 'none';
+    }
 
     window.addEventListener('resize', init);
     init();
 </script>
-
 </body>
 </html>
