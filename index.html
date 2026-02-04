@@ -2,63 +2,121 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terra Dominus</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Terra Dominus: Global Map</title>
     <style>
-        body { background: #0f172a; color: white; font-family: sans-serif; margin: 0; padding: 20px; text-align: center; }
-        .stats-card { background: #1e293b; padding: 15px; border-radius: 15px; border: 1px solid #334155; margin-bottom: 20px; }
-        .rank-title { color: #38bdf8; font-weight: bold; font-size: 1.2em; }
-        .map-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 20px; }
-        .territory { aspect-ratio: 1; background: #334155; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.7em; cursor: pointer; transition: 0.3s; }
-        .territory.owned { background: #0ea5e9; box-shadow: 0 0 15px #0ea5e9; border: 2px solid white; }
-        .btn-buy { background: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 10px; font-weight: bold; margin-top: 20px; width: 100%; }
+        body { margin: 0; background: #020617; overflow: hidden; color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        #ui-overlay { position: absolute; top: 20px; left: 20px; pointer-events: none; }
+        .stat-box { background: rgba(30, 41, 59, 0.8); padding: 10px 20px; border-radius: 12px; border: 1px solid #38bdf8; margin-bottom: 10px; backdrop-filter: blur(5px); }
+        #city-info { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1e293b; padding: 15px; border-radius: 20px; border-top: 4px solid #38bdf8; width: 80%; display: none; }
     </style>
 </head>
 <body>
-    <div class="stats-card">
-        <div>Ваш титул: <span id="rank" class="rank-title">КРЕСТЬЯНИН</span></div>
-        <div>Баланс: <span id="balance">0.00</span> USDT</div>
-    </div>
 
-    <h3>Карта Территорий</h3>
-    <div class="map-grid" id="map">
-        </div>
+<div id="ui-overlay">
+    <div class="stat-box">ИМПЕРИЯ: <span style="color:#38bdf8">Terra Dominus</span></div>
+    <div class="stat-box">ДОХОД: <span style="color:#10b981">1,240 USDT/час</span></div>
+</div>
 
-    <button class="btn-buy" onclick="buyTerritory()">ЗАХВАТИТЬ ЗЕМЛЮ (10 USDT)</button>
+<div id="city-info">
+    <div id="city-name" style="font-size: 1.2em; font-weight: bold;">Город</div>
+    <div id="city-owner" style="font-size: 0.9em; color: #94a3b8;">Владелец: Свободен</div>
+    <button style="width:100%; margin-top:10px; padding:10px; border-radius:10px; background:#38bdf8; border:none; color:white; font-weight:bold;">ЗАХВАТИТЬ</button>
+</div>
 
-    <script>
-        let tg = window.Telegram.WebApp;
-        tg.expand(); // Развернуть на весь экран
+<canvas id="mapCanvas"></canvas>
 
-        let balance = 0;
-        let ownedCount = 0;
+<script>
+    const canvas = document.getElementById('mapCanvas');
+    const ctx = canvas.getContext('2d');
+    const cityInfo = document.getElementById('city-info');
 
-        // Генерация карты
-        const map = document.getElementById('map');
-        for (let i = 1; i <= 16; i++) {
-            const div = document.createElement('div');
-            div.className = 'territory';
-            div.innerText = 'Сектор ' + i;
-            div.id = 'sec-' + i;
-            map.appendChild(div);
+    let width, height;
+    let hexSize = 40;
+    let offset = { x: 0, y: 0 };
+    let isDragging = false;
+    let startMouse = { x: 0, y: 0 };
+
+    // Вымышленные города
+    const cities = [
+        { x: 0, y: 0, name: "Capital Primus", owner: "Emperor" },
+        { x: 2, y: -1, name: "Gold-Harbor", owner: "Lord Voldem" },
+        { x: -3, y: 2, name: "Crypto-Sity", owner: "None" },
+        { x: 5, y: 4, name: "Rich-Valley", owner: "None" }
+    ];
+
+    function init() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+        draw();
+    }
+
+    function drawHex(x, y, size, color) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            let angle = Math.PI / 3 * i;
+            ctx.lineTo(x + size * Math.cos(angle), y + size * Math.sin(angle));
         }
+        ctx.closePath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
 
-        function buyTerritory() {
-            // Имитация покупки для демо
-            ownedCount++;
-            const nextFree = document.querySelector('.territory:not(.owned)');
-            if (nextFree) {
-                nextFree.classList.add('owned');
-                nextFree.innerHTML = '🏰';
-                
-                // Логика роста ранга
-                if (ownedCount >= 3) document.getElementById('rank').innerText = 'РЫЦАРЬ';
-                if (ownedCount >= 7) document.getElementById('rank').innerText = 'БАРОН';
-                
-                tg.HapticFeedback.notificationOccurred('success');
+    function draw() {
+        ctx.clearRect(0, 0, width, height);
+        
+        // Рисуем сетку
+        const rowStep = hexSize * 1.5;
+        const colStep = hexSize * Math.sqrt(3);
+
+        for (let q = -10; q < 20; q++) {
+            for (let r = -10; r < 20; r++) {
+                let centerX = offset.x + colStep * (q + r/2);
+                let centerY = offset.y + rowStep * r;
+
+                // Если гексагон в зоне видимости
+                if (centerX > -50 && centerX < width + 50 && centerY > -50 && centerY < height + 50) {
+                    drawHex(centerX, centerY, hexSize - 2, "#1e293b");
+                    
+                    // Рисуем город, если он есть в этой координате
+                    cities.forEach(city => {
+                        if (city.x === q && city.y === r) {
+                            ctx.fillStyle = city.owner === "None" ? "#38bdf8" : "#f43f5e";
+                            ctx.beginPath();
+                            ctx.arc(centerX, centerY, 8, 0, Math.PI*2);
+                            ctx.fill();
+                            ctx.fillStyle = "white";
+                            ctx.font = "10px Arial";
+                            ctx.fillText(city.name, centerX - 20, centerY + 25);
+                        }
+                    });
+                }
             }
         }
-    </script>
+        requestAnimationFrame(draw);
+    }
+
+    // Управление (Drag)
+    canvas.addEventListener('mousedown', e => { isDragging = true; startMouse = { x: e.clientX - offset.x, y: e.clientY - offset.y }; });
+    window.addEventListener('mouseup', () => isDragging = false);
+    window.addEventListener('mousemove', e => {
+        if (isDragging) {
+            offset.x = e.clientX - startMouse.x;
+            offset.y = e.clientY - startMouse.y;
+        }
+    });
+
+    // Клик по карте
+    canvas.addEventListener('click', () => {
+        cityInfo.style.display = 'block';
+        document.getElementById('city-name').innerText = "Сектор захвачен!";
+    });
+
+    window.addEventListener('resize', init);
+    init();
+</script>
+
 </body>
 </html>
